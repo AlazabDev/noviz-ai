@@ -285,14 +285,21 @@ def execute_call_spec(spec: dict):
 		return _json_safe(doc.as_dict())
 
 	if kind == "print_and_email_document":
-		# Renders this document's own real print format to PDF (the exact
-		# same frappe.get_print/get_pdf path ERPNext's own "Print" ->
-		# "Download PDF" uses) and emails it as an attachment through our
-		# own SMTP (email_sender.py — same reasoning as reply_communication/
-		# send_communication below: never depend on Frappe's configured
-		# Email Account). values.print_format is optional (falls back to
-		# the doctype's own default print format, same as the desk Print
-		# dialog does when none is picked).
+		# Renders this document's own real print format to PDF through
+		# frappe.get_print(..., as_pdf=True) — the SAME high-level call
+		# frappe.utils.print_format.download_pdf itself makes for ERPNext's
+		# own "Print" -> "Download PDF" — deliberately NOT a hand-rolled
+		# get_html_and_style()+get_pdf() pair, because that would silently
+		# skip Print Settings' own "PDF Generator" choice (wkhtmltopdf vs.
+		# the Chrome-based engine Frappe v16 introduced — see Print
+		# Settings in the desk) and any letterhead handling; frappe.get_print
+		# is the one call site guaranteed to stay correct as that setting
+		# (or its default) changes across versions. Emails the result as an
+		# attachment through our own SMTP (email_sender.py — same reasoning
+		# as reply_communication/send_communication below: never depend on
+		# Frappe's configured Email Account). values.print_format is
+		# optional (falls back to the doctype's own default print format,
+		# same as the desk Print dialog does when none is picked).
 		name = spec.get("name")
 		values = spec.get("values") or {}
 		to_address = values.get("to")
@@ -304,12 +311,8 @@ def execute_call_spec(spec: dict):
 		if not doc.has_permission("email"):
 			frappe.throw(f'Noviz AI: you do not have permission to email this {doctype} record.', frappe.PermissionError)
 
-		from frappe.utils.pdf import get_pdf
-		from frappe.www.printview import get_html_and_style
-
 		print_format = values.get("print_format")
-		rendered = get_html_and_style(doc=frappe.as_json(doc.as_dict()), print_format=print_format, doctype=doctype, name=name)
-		pdf_bytes = get_pdf(rendered["html"])
+		pdf_bytes = frappe.get_print(doctype, name, print_format, doc=doc, as_pdf=True)
 
 		subject = values.get("subject") or f"{doctype} {name}"
 		body = values.get("body") or f"Please find attached {doctype} {name}."

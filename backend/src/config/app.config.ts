@@ -19,6 +19,23 @@ pgTypes.setTypeParser(20, (val: string) => parseInt(val, 10));
 export const appConfig = {
   port: Number(process.env.PORT || 4000),
 
+  // Structured logging (core/logger.ts) + optional Sentry error tracking.
+  // Every logger.error(...) call across the app forwards to Sentry
+  // automatically when SENTRY_DSN is set — see logger.ts's own doc
+  // comment. Leaving SENTRY_DSN empty disables Sentry entirely; logging
+  // itself (to stdout, as JSON in production / pretty-printed in dev)
+  // always works regardless.
+  logLevel: process.env.LOG_LEVEL || "info",
+  sentry: {
+    dsn: process.env.SENTRY_DSN || "",
+    environment: process.env.SENTRY_ENVIRONMENT || process.env.NODE_ENV || "development",
+    // Fraction of requests to trace for performance monitoring — 0
+    // disables tracing but keeps error capture on, the right default
+    // for a backend that's mostly waiting on the LLM/ERPNext, not
+    // computing.
+    tracesSampleRate: Number(process.env.SENTRY_TRACES_SAMPLE_RATE || 0),
+  },
+
   // Comma-separated module names to load. Add a new module dir under
   // src/modules/, then add its name here (or via env) — nothing else
   // needs to change. "entities"/"workflows"/"reports" are activation

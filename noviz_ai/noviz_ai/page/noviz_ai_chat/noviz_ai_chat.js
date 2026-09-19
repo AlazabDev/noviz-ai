@@ -351,8 +351,15 @@ class NovizAIChat {
 				if (status.can_configure) {
 					$setup.html(
 						`<p>${__('Noviz AI is not configured yet. Add your Relay Base URL and API Key to get started.')}</p>` +
-						`<a class="btn btn-primary btn-sm" href="/app/noviz-ai-settings">${__('Configure Noviz AI Settings')}</a>`
+						// frappe.set_route (below), not a hardcoded href — v16 renamed the
+						// desk's own URL prefix from "/app" to "/desk" (see
+						// https://github.com/frappe/frappe/wiki, "v16 Migration Checklist" ->
+						// "Route Changes"), so a literal "/app/noviz-ai-settings" href 404s
+						// there. set_route asks Frappe's own router for the correct prefix
+						// on whichever version this is actually running on.
+						`<button type="button" class="btn btn-primary btn-sm noviz-ai-open-settings">${__('Configure Noviz AI Settings')}</button>`
 					);
+					$setup.find('.noviz-ai-open-settings').on('click', () => frappe.set_route('Form', 'Noviz AI Settings'));
 				} else {
 					$setup.text(__('Noviz AI is not set up yet. Ask your ERPNext administrator to configure it under Noviz AI Settings.'));
 				}
