@@ -10,7 +10,17 @@ import json
 
 import frappe
 
-SUPPORTED_KINDS = {"get_list", "get_doc", "create_doc", "update_doc", "reply_communication", "send_communication", "mark_notification_read", "run_report", "list_inbox_emails", "send_reply_email"}
+SUPPORTED_KINDS = {
+	"get_list", "get_doc", "create_doc", "update_doc",
+	"reply_communication", "send_communication", "mark_notification_read",
+	"run_report", "list_inbox_emails", "send_reply_email",
+	# Added for document-lifecycle + workflow + print-and-email automation
+	# (submit/cancel a Sales Invoice, move a multi-stage approval forward,
+	# email a document's own print format) — see execute_call_spec's own
+	# branches below for the real permission/behavior of each.
+	"submit_doc", "cancel_doc", "get_workflow_actions", "apply_workflow_action",
+	"print_and_email_document",
+}
 
 
 def _json_safe(value):
@@ -194,6 +204,121 @@ def execute_call_spec(spec: dict):
 		if not fields:
 			return full
 		return {f: full.get(f) for f in fields}
+
+	if kind == "submit_doc":
+		# Real docstatus transition (0 -> 1) on a submittable doctype
+		# (Sales Invoice, Sales Order, Purchase Invoice, Journal Entry, ...).
+		# doc.submit() runs the SAME real validation/permission checks
+		# ERPNext's own "Submit" button does (on_submit hooks, mandatory
+		# fields, submit permission on this user's real role) — nothing
+		# bypassed, nothing run with elevated rights.
+		name = spec.get("name")
+		if not name:
+			frappe.throw('Noviz AI: a "submit_doc" call spec requires a "name" — cannot execute it.')
+		doc = frappe.get_doc(doctype, name)
+		if not doc.has_permission("submit"):
+			frappe.throw(f'Noviz AI: you do not have permission to submit this {doctype} record.', frappe.PermissionError)
+		doc.submit()
+		# The submit already happened once .submit() returns (real hooks
+		# may have fired real downstream side effects, e.g. GL entries) —
+		# same "the write is real before the response finishes serializing"
+		# reasoning as create_doc/update_doc below.
+		frappe.db.commit()  # nosemgrep: frappe-manual-commit
+		return _json_safe(doc.as_dict())
+
+	if kind == "cancel_doc":
+		# Real docstatus transition (1 -> 2). Same real permission model —
+		# doc.cancel() throws frappe.PermissionError itself when this
+		# user's role doesn't grant "cancel", exactly like clicking
+		# "Cancel" in the desk would.
+		name = spec.get("name")
+		if not name:
+			frappe.throw('Noviz AI: a "cancel_doc" call spec requires a "name" — cannot execute it.')
+		doc = frappe.get_doc(doctype, name)
+		if not doc.has_permission("cancel"):
+			frappe.throw(f'Noviz AI: you do not have permission to cancel this {doctype} record.', frappe.PermissionError)
+		doc.cancel()
+		frappe.db.commit()  # nosemgrep: frappe-manual-commit
+		return _json_safe(doc.as_dict())
+
+	if kind == "get_workflow_actions":
+		# Read-only: which real workflow transitions this specific document,
+		# IN ITS CURRENT STATE, actually offers THIS logged-in user right
+		# now (frappe.model.workflow.get_transitions already intersects the
+		# Workflow doctype's own configured transitions for the current
+		# `workflow_state` against this user's real roles) — never a
+		# hardcoded action list, since a multi-stage approval's available
+		# next steps genuinely depend on both of those. Empty list is a
+		# real, valid answer (no workflow configured for this doctype, or
+		# this user's role has no next step from here), not an error.
+		name = spec.get("name")
+		if not name:
+			frappe.throw('Noviz AI: a "get_workflow_actions" call spec requires a "name" — cannot execute it.')
+		doc = frappe.get_doc(doctype, name)
+		if not doc.has_permission("read"):
+			frappe.throw(f'Noviz AI: you do not have permission to read this {doctype} record.', frappe.PermissionError)
+		from frappe.model.workflow import get_transitions
+
+		transitions = get_transitions(doc)
+		return _json_safe([
+			{"action": t.action, "next_state": t.next_state, "allowed": t.allowed}
+			for t in transitions
+		])
+
+	if kind == "apply_workflow_action":
+		# Real transition: frappe.model.workflow.apply_workflow re-validates
+		# the SAME transition (still filtered to this state + this user's
+		# roles, same as get_workflow_actions above — the earlier read is
+		# only a convenience for the model to choose a valid action name
+		# from, never trusted as the actual authorization) and updates
+		# `workflow_state` (plus docstatus, when the transition's own
+		# config says so — e.g. the final approval step submits the doc).
+		name = spec.get("name")
+		action = spec.get("action") or (spec.get("values") or {}).get("action")
+		if not name or not action:
+			frappe.throw('Noviz AI: an "apply_workflow_action" call spec requires "name" and "action" — cannot execute it.')
+		doc = frappe.get_doc(doctype, name)
+		from frappe.model.workflow import apply_workflow
+
+		doc = apply_workflow(doc, action)
+		frappe.db.commit()  # nosemgrep: frappe-manual-commit
+		return _json_safe(doc.as_dict())
+
+	if kind == "print_and_email_document":
+		# Renders this document's own real print format to PDF (the exact
+		# same frappe.get_print/get_pdf path ERPNext's own "Print" ->
+		# "Download PDF" uses) and emails it as an attachment through our
+		# own SMTP (email_sender.py — same reasoning as reply_communication/
+		# send_communication below: never depend on Frappe's configured
+		# Email Account). values.print_format is optional (falls back to
+		# the doctype's own default print format, same as the desk Print
+		# dialog does when none is picked).
+		name = spec.get("name")
+		values = spec.get("values") or {}
+		to_address = values.get("to")
+		if not name or not to_address:
+			frappe.throw('Noviz AI: a "print_and_email_document" call spec requires "name" and "values.to" — cannot execute it.')
+		doc = frappe.get_doc(doctype, name)
+		if not doc.has_permission("print"):
+			frappe.throw(f'Noviz AI: you do not have permission to print this {doctype} record.', frappe.PermissionError)
+		if not doc.has_permission("email"):
+			frappe.throw(f'Noviz AI: you do not have permission to email this {doctype} record.', frappe.PermissionError)
+
+		from frappe.utils.pdf import get_pdf
+		from frappe.www.printview import get_html_and_style
+
+		print_format = values.get("print_format")
+		rendered = get_html_and_style(doc=frappe.as_json(doc.as_dict()), print_format=print_format, doctype=doctype, name=name)
+		pdf_bytes = get_pdf(rendered["html"])
+
+		subject = values.get("subject") or f"{doctype} {name}"
+		body = values.get("body") or f"Please find attached {doctype} {name}."
+		file_name = f"{name}.pdf".replace("/", "-")
+
+		from noviz_ai.email_sender import send_with_attachment
+
+		send_with_attachment(to_address, subject, body, attachments=[(file_name, pdf_bytes, "application/pdf")])
+		return {"sent": True, "to": to_address, "doctype": doctype, "name": name}
 
 	if kind == "reply_communication":
 		# Sends a REAL reply email — 2026-08-22: switched from Frappe's own

@@ -253,21 +253,16 @@ def _drive_fetch_continue_loop(result, base_url, headers, session):
 	return result
 
 
-@frappe.whitelist()
-def send_message(prompt: str, previous_turn_id: str = None):
-	"""The one real entry point real users hit from the chat page for a
-	typed message. See _drive_fetch_continue_loop's own doc comment for
-	what happens after the first request.
-
-	`previous_turn_id` (optional): real conversation memory — pass back
-	the LAST final result's own "turnId" so the relay can load that
-	conversation's history and continue it, instead of starting a
-	completely fresh one every single message. The chat page's own JS
-	tracks this across messages within one page load; a reload starts a
-	genuinely new conversation, same session boundary Pro's own chat
-	memory already uses. A missing/stale/wrong-tenant one fails
-	gracefully server-side (relayReasoningEngine.ts's own doc comment) —
-	never a hard error here either.
+def run_agent_turn(prompt: str, previous_turn_id: str = None):
+	"""The real shared core behind a chat turn — factored out of
+	send_message (still the one real HTTP entry point real users hit) so
+	scheduled_tasks.py's own headless runs (see that module's doc
+	comment) can drive the exact same relay round trip + fetch/continue
+	loop, under `frappe.session.user` at the time this is called (the
+	caller decides who that is — send_message never touches it, a
+	scheduled job sets it explicitly via frappe.set_user first). No
+	`@frappe.whitelist()` here on purpose: this is an internal building
+	block, not a second public endpoint.
 	"""
 	if not prompt or not prompt.strip():
 		frappe.throw("prompt is required")
@@ -299,6 +294,26 @@ def send_message(prompt: str, previous_turn_id: str = None):
 			session,
 		)
 		return _drive_fetch_continue_loop(result, base_url, headers, session)
+
+
+@frappe.whitelist()
+def send_message(prompt: str, previous_turn_id: str = None):
+	"""The one real entry point real users hit from the chat page for a
+	typed message. See run_agent_turn's own doc comment for the actual
+	relay round trip, and _drive_fetch_continue_loop's for what happens
+	after the first request.
+
+	`previous_turn_id` (optional): real conversation memory — pass back
+	the LAST final result's own "turnId" so the relay can load that
+	conversation's history and continue it, instead of starting a
+	completely fresh one every single message. The chat page's own JS
+	tracks this across messages within one page load; a reload starts a
+	genuinely new conversation, same session boundary Pro's own chat
+	memory already uses. A missing/stale/wrong-tenant one fails
+	gracefully server-side (relayReasoningEngine.ts's own doc comment) —
+	never a hard error here either.
+	"""
+	return run_agent_turn(prompt, previous_turn_id)
 
 
 @frappe.whitelist()

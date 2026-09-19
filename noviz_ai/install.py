@@ -10,6 +10,7 @@ def after_install():
 	_create_agent_role()
 	_grant_page_doctype_permission()
 	_grant_settings_doctype_permission()
+	_grant_scheduled_task_doctype_permission()
 	_grant_agent_role_to_system_managers()
 	_add_desktop_icon()
 	_add_sidebar_links()
@@ -26,6 +27,7 @@ def after_migrate():
 	_create_agent_role()
 	_grant_page_doctype_permission()
 	_grant_settings_doctype_permission()
+	_grant_scheduled_task_doctype_permission()
 	_grant_agent_role_to_system_managers()
 	_add_desktop_icon()
 	_add_sidebar_links()
@@ -79,6 +81,28 @@ def _grant_settings_doctype_permission():
 		}
 	).insert(ignore_permissions=True)
 	frappe.clear_cache(doctype="Noviz AI Settings")
+
+
+def _grant_scheduled_task_doctype_permission():
+	# Read-only for the Agent role — same reasoning as the Settings grant
+	# above (so an Agent, not just a System Manager, can at least SEE what
+	# scheduled automations exist). Creating/editing a schedule stays a
+	# System Manager action (the doctype's own default permission row,
+	# see noviz_ai_scheduled_task.json) since it lets someone choose which
+	# user a prompt runs as.
+	if frappe.db.exists("Custom DocPerm", {"parent": "Noviz AI Scheduled Task", "role": "Noviz AI Agent"}):
+		return
+	frappe.get_doc(
+		{
+			"doctype": "Custom DocPerm",
+			"parent": "Noviz AI Scheduled Task",
+			"parenttype": "DocType",
+			"parentfield": "permissions",
+			"role": "Noviz AI Agent",
+			"read": 1,
+		}
+	).insert(ignore_permissions=True)
+	frappe.clear_cache(doctype="Noviz AI Scheduled Task")
 
 
 def _grant_agent_role_to_system_managers():
@@ -172,6 +196,7 @@ _SIDEBAR_ROWS = [
 	{"link_type": "Workspace", "link_to": "ERP Assistant", "label": "ERP Assistant", "icon": "bot"},
 	{"link_type": "Page", "link_to": "noviz-ai-chat", "label": "Noviz AI Chat", "icon": "message"},
 	{"link_type": "DocType", "link_to": "Noviz AI Settings", "label": "Noviz AI Settings", "icon": "settings"},
+	{"link_type": "DocType", "link_to": "Noviz AI Scheduled Task", "label": "Scheduled Automations", "icon": "timer"},
 	{"link_type": "URL", "link_to": None, "url": "mailto:support@noviz.in", "label": "Support", "icon": "help"},
 ]
 

@@ -161,23 +161,26 @@ after_migrate = "noviz_ai.install.after_migrate"
 # Scheduled Tasks
 # ---------------
 
-# scheduler_events = {
-# 	"all": [
-# 		"noviz_ai.tasks.all"
-# 	],
-# 	"daily": [
-# 		"noviz_ai.tasks.daily"
-# 	],
-# 	"hourly": [
-# 		"noviz_ai.tasks.hourly"
-# 	],
-# 	"weekly": [
-# 		"noviz_ai.tasks.weekly"
-# 	],
-# 	"monthly": [
-# 		"noviz_ai.tasks.monthly"
-# 	],
-# }
+# Drives "Noviz AI Scheduled Task" records — a saved plain-language
+# prompt (e.g. "email today's overdue invoices to accounts@example.com")
+# run on its own cadence as its own configured user, through the exact
+# same relay round trip a live chat message uses. See scheduled_tasks.py
+# for the real per-user permission handling and per-task failure
+# isolation.
+scheduler_events = {
+	"hourly": [
+		"noviz_ai.scheduled_tasks.run_hourly",
+	],
+	"daily": [
+		"noviz_ai.scheduled_tasks.run_daily",
+	],
+	"weekly": [
+		"noviz_ai.scheduled_tasks.run_weekly",
+	],
+	"monthly": [
+		"noviz_ai.scheduled_tasks.run_monthly",
+	],
+}
 
 # Testing
 # -------
