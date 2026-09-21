@@ -1,5 +1,8 @@
 import { randomUUID } from "crypto";
 import { Session } from "./types";
+import { createLogger } from "./logger";
+
+const logger = createLogger("sessionStore");
 
 /**
  * SECURITY-MOTIVATED DESIGN: the agent's JWT (held in the browser)
@@ -34,7 +37,7 @@ class SessionStore {
     const now = Date.now();
     for (const entry of this.store.values()) {
       if (entry.session.sub === session.sub && entry.expiresAt > now) {
-        console.warn(`[sessionStore] ${session.sub} is logging in while already having an active session elsewhere`);
+        logger.warn(`${session.sub} is logging in while already having an active session elsewhere`);
         break;
       }
     }

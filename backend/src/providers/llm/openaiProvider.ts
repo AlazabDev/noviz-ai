@@ -1,9 +1,12 @@
 import { LLMProvider, LLMMessage, LLMResponse, ToolDefinition } from "../../core/types";
 import { appConfig } from "../../config/app.config";
 import { settingsService } from "../../core/settingsService";
+import { createLogger } from "../../core/logger";
 import axios from "axios";
 import http from "http";
 import https from "https";
+
+const logger = createLogger("openaiProvider");
 
 // Connection reuse for every call this process makes to OpenAI (or
 // whatever OpenAI-compatible baseUrl is configured) — a multi-tool-call
@@ -101,13 +104,13 @@ export class OpenAIProvider implements LLMProvider {
         const message = err.response?.data?.error?.message || err.message;
         if (status === 429 && attempt < MAX_ATTEMPTS - 1) {
           const waitMs = Math.min(parseRetryAfterMs(message) ?? 1500, 10000) + Math.floor(Math.random() * 300);
-          console.warn(`[openaiProvider] 429 rate limited (attempt ${attempt + 1}), retrying in ${waitMs}ms`);
+          logger.warn(`429 rate limited (attempt ${attempt + 1}), retrying in ${waitMs}ms`);
           await new Promise((resolve) => setTimeout(resolve, waitMs));
           continue;
         }
         if (attempt < MAX_ATTEMPTS - 1 && isTimeout) {
           const waitMs = 300 + Math.floor(Math.random() * 300);
-          console.warn(`[openaiProvider] request timed out after ${REQUEST_TIMEOUT_MS}ms (attempt ${attempt + 1}), retrying in ${waitMs}ms`);
+          logger.warn(`request timed out after ${REQUEST_TIMEOUT_MS}ms (attempt ${attempt + 1}), retrying in ${waitMs}ms`);
           await new Promise((resolve) => setTimeout(resolve, waitMs));
           continue;
         }

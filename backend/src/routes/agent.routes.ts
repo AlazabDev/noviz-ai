@@ -13,6 +13,9 @@ import { alertStore } from "../core/alertStore";
 import { mailboxConnector } from "../providers/mail/stubMailboxConnector";
 import { workflowActionStore } from "../core/workflowActionStore";
 import { businessEmailStore } from "../core/businessEmailStore";
+import { createLogger } from "../core/logger";
+
+const logger = createLogger("agent.routes");
 import { listCredentialedUsers } from "../core/credentialedUsersService";
 import { systemConnector } from "../config/system.config";
 import { scanDocumentImage } from "../providers/vision/documentScanner";
@@ -74,7 +77,7 @@ router.post("/prompt", asyncHandler(async (req: AuthedRequest, res) => {
     }
     await conversationStore.appendUserMessage(conversationId, prompt, false);
   } catch (err) {
-    console.warn("[agent.routes] failed to persist user message to conversation history — continuing without it", err);
+    logger.warn("failed to persist user message to conversation history — continuing without it", { err });
     conversationId = undefined;
   }
 
@@ -99,7 +102,7 @@ router.post("/prompt", asyncHandler(async (req: AuthedRequest, res) => {
     try {
       await conversationStore.appendAgentMessage(conversationId, response);
     } catch (err) {
-      console.warn("[agent.routes] failed to persist agent message to conversation history", err);
+      logger.warn("failed to persist agent message to conversation history", { err });
     }
   }
   res.json({ ...response, conversation_id: conversationId });
@@ -402,7 +405,7 @@ router.post("/scan", scanUpload.single("image"), asyncHandler(async (req: Authed
     }
     await conversationStore.appendUserMessage(conversationId, historyLabel, false);
   } catch (err) {
-    console.warn("[agent.routes] failed to persist scanned-image message to conversation history — continuing without it", err);
+    logger.warn("failed to persist scanned-image message to conversation history — continuing without it", { err });
     conversationId = undefined;
   }
   sessionCacheProvider.switchConversation(req.session!.sessionId!, conversationId);
@@ -414,7 +417,7 @@ router.post("/scan", scanUpload.single("image"), asyncHandler(async (req: Authed
     try {
       await conversationStore.appendAgentMessage(conversationId, response);
     } catch (err) {
-      console.warn("[agent.routes] failed to persist scanned-image agent message to conversation history", err);
+      logger.warn("failed to persist scanned-image agent message to conversation history", { err });
     }
   }
   res.json({ ...response, conversation_id: conversationId });

@@ -1,4 +1,7 @@
 import { BusinessRule, RuleSet, RuleViolation, Session } from "./types";
+import { createLogger } from "./logger";
+
+const logger = createLogger("businessRuleEngine");
 
 export interface RuleEvaluation {
   allowed: boolean;
@@ -44,8 +47,8 @@ class BusinessRuleEngine {
         violation = await rule.check(args, session, current);
       } catch (err) {
         const blocking = !!rule.failClosed;
-        console.error(
-          `[businessRuleEngine] rule "${rule.id}" threw during evaluation — ${blocking ? "failClosed:true, BLOCKING this action" : "treated as non-blocking, not enforced this call"}`,
+        logger.error(
+          `rule "${rule.id}" threw during evaluation — ${blocking ? "failClosed:true, BLOCKING this action" : "treated as non-blocking, not enforced this call"}`,
           err
         );
         violation = {

@@ -8,6 +8,9 @@ import { DOCUMENT_LINK_MAP } from "./documentLinkMap";
 import { resolveRelativePeriod } from "../core/relativePeriods";
 import { computeStatsOp, StatsOp } from "../core/statsCalculator";
 import { settingsService } from "../core/settingsService";
+import { createLogger } from "../core/logger";
+
+const logger = createLogger("erpnextConnector");
 
 /**
  * ERPNext's implementation of the ERP-agnostic connector contract.
@@ -196,7 +199,7 @@ export class ErpNextConnector implements SystemConnector {
       );
       value = rows[0]?.company_name || null;
     } catch (err) {
-      console.warn(`[erpnextConnector] getCompanyName() failed, continuing without it: ${(err as Error).message}`);
+      logger.warn("getCompanyName() failed, continuing without it", { err: (err as Error).message });
     }
     ErpNextConnector.companyNameCache = { value, fetchedAt: Date.now() };
     return value;
@@ -208,7 +211,7 @@ export class ErpNextConnector implements SystemConnector {
     const nativeFilters = params?.filters ? toNativeFilters(entityKey, params.filters) : undefined;
     const nativeSortField = params?.sortBy ? mapping.fieldMap[params.sortBy] : undefined;
     if (params?.sortBy && !nativeSortField) {
-      console.warn(`[erpnextConnector] "${params.sortBy}" has no native mapping for "${entityKey}" — sortBy ignored`);
+      logger.warn(`"${params.sortBy}" has no native mapping for "${entityKey}" — sortBy ignored`);
     }
     // "name" (this doctype's real primary key) is ALWAYS appended as a
     // secondary sort key — confirmed live: two identical calls (same
@@ -379,7 +382,7 @@ export class ErpNextConnector implements SystemConnector {
         // quirk on some deployment) should never take down the whole
         // list/get — same "degrade, don't fail the real request"
         // discipline as backfillPrimaryContactInfo/backfillEmployeePhone.
-        console.warn(`[erpnextConnector] backfillDocumentLinks("${entityKey}", "${mapping.canonicalField}") failed, continuing without it: ${(err as Error).message}`);
+        logger.warn(`backfillDocumentLinks("${entityKey}", "${mapping.canonicalField}") failed, continuing without it`, { err: (err as Error).message });
       }
     }
   }
@@ -581,7 +584,7 @@ export class ErpNextConnector implements SystemConnector {
     }
     const nativeGroupBy = params.groupBy ? mapping.fieldMap[params.groupBy] : undefined;
     if (params.groupBy && !nativeGroupBy) {
-      console.warn(`[erpnextConnector] groupBy "${params.groupBy}" has no native mapping for "${entityKey}" — ignored`);
+      logger.warn(`groupBy "${params.groupBy}" has no native mapping for "${entityKey}" — ignored`);
     }
 
     // Confirmed 2026-08-14: a KPI-dashboard prompt asked for median/
@@ -616,7 +619,7 @@ export class ErpNextConnector implements SystemConnector {
         client
       );
       if (rows.length === ErpNextConnector.AGGREGATE_ROW_CAP) {
-        console.warn(`[erpnextConnector] aggregate() op:"${params.op}" on "${entityKey}" hit the ${ErpNextConnector.AGGREGATE_ROW_CAP}-row cap — result may be a partial-data undercount, narrow the filters for an exact number`);
+        logger.warn(`aggregate() op:"${params.op}" on "${entityKey}" hit the ${ErpNextConnector.AGGREGATE_ROW_CAP}-row cap — result may be a partial-data undercount, narrow the filters for an exact number`);
       }
       const reduce = (group: any[]): { value: number; count: number } => {
         const nums = group.map((r) => Number(r[nativeField!])).filter((n) => !Number.isNaN(n));
@@ -666,8 +669,8 @@ export class ErpNextConnector implements SystemConnector {
         // so this is the one case that still falls back to the old
         // capped-fetch-and-warn behavior (directionally correct, flagged
         // as possibly partial, not silently wrong).
-        console.warn(
-          `[erpnextConnector] aggregate() on "${entityKey}" matches ${totalCount} rows (over the ${ErpNextConnector.AGGREGATE_ROW_CAP}-row cap) ` +
+        logger.warn(
+          `aggregate() on "${entityKey}" matches ${totalCount} rows (over the ${ErpNextConnector.AGGREGATE_ROW_CAP}-row cap) ` +
           `and has no date-range filter to chunk on — result is capped at ${ErpNextConnector.AGGREGATE_ROW_CAP} rows and may undercount; ` +
           `add a date filter or narrow the query for an exact total`
         );
@@ -728,7 +731,7 @@ export class ErpNextConnector implements SystemConnector {
         const upstreamMsg = err?.response?.data?.exception || err?.message || "";
         const looksTransient = /please try again|timeout|ECONNRESET|ECONNREFUSED|socket hang up/i.test(upstreamMsg);
         if (attempt < 2 && looksTransient) {
-          console.warn(`[erpnextConnector] runReport("${reportKey}") attempt ${attempt + 1} hit a transient-looking error, retrying:`, upstreamMsg);
+          logger.warn(`runReport("${reportKey}") attempt ${attempt + 1} hit a transient-looking error, retrying`, { upstreamMsg });
           await new Promise((resolve) => setTimeout(resolve, 400 * (attempt + 1)));
           continue;
         }

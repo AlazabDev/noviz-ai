@@ -14,6 +14,7 @@
 import frappe
 
 from noviz_ai.api import run_agent_turn
+from noviz_ai.alerts import notify_scheduled_task_failure
 
 
 def _run_tasks(frequency: str):
@@ -47,6 +48,11 @@ def _run_one_task(task_name: str):
 		frappe.log_error(title=f"Noviz AI: scheduled task '{task_name}' failed", message=frappe.get_traceback())
 		task.db_set("last_status", "Failed", update_modified=False)
 		task.db_set("last_result", str(e)[:1900], update_modified=False)
+		# The whole reason this task's failure needs an active push, not
+		# just an Error Log entry: nobody's watching a scheduled run the
+		# way they'd watch a live chat message fail in front of them —
+		# see alerts.py's own doc comment.
+		notify_scheduled_task_failure(task_name, str(e))
 	finally:
 		task.db_set("last_run", frappe.utils.now_datetime(), update_modified=False)
 		frappe.set_user(original_user)

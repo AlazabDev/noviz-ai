@@ -12,6 +12,9 @@ import { ASSETS_MAP } from "./entityMaps/assets";
 import { QUALITY_MAP } from "./entityMaps/quality";
 import { SUPPORT_MAP } from "./entityMaps/support";
 import { NOTIFICATIONS_MAP } from "./entityMaps/notifications";
+import { createLogger } from "../core/logger";
+
+const logger = createLogger("entityMap");
 
 export type { ErpNextEntityMapping };
 
@@ -162,7 +165,7 @@ export function toNativeData(entityKey: string, canonicalData: Record<string, an
           if (rowNative) {
             nativeRow[rowNative] = rowValue;
           } else {
-            console.warn(`[entityMap] "${rowCanonical}" has no native mapping for "${entityKey}.${canonical}" rows — ignored`);
+            logger.warn(`"${rowCanonical}" has no native mapping for "${entityKey}.${canonical}" rows — ignored`);
           }
         }
         return nativeRow;
@@ -173,7 +176,7 @@ export function toNativeData(entityKey: string, canonicalData: Record<string, an
     if (native) {
       out[native] = value;
     } else {
-      console.warn(`[entityMap] "${canonical}" has no native mapping for "${entityKey}" — ignored`);
+      logger.warn(`"${canonical}" has no native mapping for "${entityKey}" — ignored`);
     }
   }
   return out;

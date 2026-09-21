@@ -1,6 +1,9 @@
 import { Router } from "express";
 import { requireAuth, AuthedRequest } from "../auth/middleware";
 import { callTool, listAllowedTools } from "../core/gateway";
+import { createLogger } from "../core/logger";
+
+const logger = createLogger("tools.routes");
 
 /**
  * GENERIC structured API surface — replaces per-module route files.
@@ -31,12 +34,10 @@ router.post("/:toolName", async (req: AuthedRequest, res) => {
     // table/report views AND for testing), so its own errors deserve the
     // same visibility as every tool call the reasoning loop makes.
     const status = err.name === "ToolNotAllowedError" ? 403 : err.status || err.response?.status || 400;
-    console.error(
-      `[tools.routes] ${req.params.toolName} failed:`,
-      err.message,
-      err.response?.status ? `upstreamStatus=${err.response.status}` : "",
-      err.response?.data ? `upstreamBody=${JSON.stringify(err.response.data).slice(0, 500)}` : ""
-    );
+    logger.error(`${req.params.toolName} failed`, err, {
+      upstreamStatus: err.response?.status,
+      upstreamBody: err.response?.data ? JSON.stringify(err.response.data).slice(0, 500) : undefined,
+    });
     res.status(status).json({ error: err.response?.data?.exception || err.response?.data?.message || err.message });
   }
 });

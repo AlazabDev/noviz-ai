@@ -23,6 +23,9 @@ import { REPORT_CONFIGS } from "./config/reports.config";
 import { businessRuleEngine } from "./core/businessRuleEngine";
 import { RULE_CONFIGS } from "./config/rules.config";
 import { vectorContextProvider } from "./providers/context/vectorContextProvider";
+import { createLogger } from "./core/logger";
+
+const logger = createLogger("bootstrap");
 import { OpenAIEmbedder } from "./providers/embeddings/openaiEmbedder";
 import "./renderers/tableRenderer"; // side-effect: registers renderers
 import "./renderers/cardsRenderer"; // side-effect: registers the "cards" renderer
@@ -82,7 +85,7 @@ export function bootstrapModules() {
     if (NON_MODULE_ACTIVATION_FLAGS.has(trimmed)) continue;
     const mod = AVAILABLE_MODULES[trimmed];
     if (!mod) {
-      console.warn(`[bootstrap] Unknown module "${name}" in ACTIVE_MODULES — skipping`);
+      logger.warn(`Unknown module "${name}" in ACTIVE_MODULES — skipping`);
       continue;
     }
     moduleRegistry.register(mod);
@@ -109,5 +112,5 @@ export function bootstrapModules() {
 
   for (const ruleSet of RULE_CONFIGS) businessRuleEngine.register(ruleSet);
 
-  console.log(`[bootstrap] Loaded modules: ${moduleRegistry.getModules().map((m) => m.name).join(", ")}`);
+  logger.info(`Loaded modules: ${moduleRegistry.getModules().map((m) => m.name).join(", ")}`);
 }

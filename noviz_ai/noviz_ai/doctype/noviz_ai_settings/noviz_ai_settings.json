@@ -18,7 +18,11 @@
   "email_username",
   "email_password",
   "policy_section",
-  "module_policies"
+  "module_policies",
+  "alerts_section",
+  "alert_email",
+  "alerts_column_break",
+  "slack_webhook_url"
  ],
  "fields": [
   {
@@ -94,6 +98,29 @@
    "fieldtype": "Table",
    "label": "Module Policies",
    "options": "Noviz AI Module Policy"
+  },
+  {
+   "fieldname": "alerts_section",
+   "fieldtype": "Section Break",
+   "label": "Failure Alerts",
+   "description": "Who gets notified when a Noviz AI Scheduled Task fails (see scheduled_tasks.py) \u2014 both are optional, and either/both can be filled in."
+  },
+  {
+   "description": "Sent via the same SMTP settings configured above under Email Inbox.",
+   "fieldname": "alert_email",
+   "fieldtype": "Data",
+   "label": "Alert Email",
+   "options": "Email"
+  },
+  {
+   "fieldname": "alerts_column_break",
+   "fieldtype": "Column Break"
+  },
+  {
+   "description": "An Incoming Webhook URL from Slack (Slack app settings \u2192 Incoming Webhooks). Stored as a password field since anyone holding this URL can post to that channel.",
+   "fieldname": "slack_webhook_url",
+   "fieldtype": "Password",
+   "label": "Slack Webhook URL"
   }
  ],
  "grid_page_length": 50,

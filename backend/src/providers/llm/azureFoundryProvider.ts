@@ -1,8 +1,11 @@
 import { LLMProvider, LLMMessage, LLMResponse, ToolDefinition } from "../../core/types";
 import { appConfig } from "../../config/app.config";
+import { createLogger } from "../../core/logger";
 import axios from "axios";
 import http from "http";
 import https from "https";
+
+const logger = createLogger("azureFoundryProvider");
 
 // Same connection-reuse reasoning as openaiProvider.ts — a multi-tool-call
 // turn makes 2+ sequential calls to the same Foundry resource host.
@@ -103,13 +106,13 @@ export class AzureFoundryProvider implements LLMProvider {
         const message = err.response?.data?.error?.message || err.message;
         if (status === 429 && attempt < MAX_ATTEMPTS - 1) {
           const waitMs = Math.min(parseRetryAfterMs(message) ?? 1500, 10000) + Math.floor(Math.random() * 300);
-          console.warn(`[azureFoundryProvider] 429 rate limited (attempt ${attempt + 1}), retrying in ${waitMs}ms`);
+          logger.warn(`429 rate limited (attempt ${attempt + 1}), retrying in ${waitMs}ms`);
           await new Promise((resolve) => setTimeout(resolve, waitMs));
           continue;
         }
         if (attempt < MAX_ATTEMPTS - 1 && isTimeout) {
           const waitMs = 300 + Math.floor(Math.random() * 300);
-          console.warn(`[azureFoundryProvider] request timed out after ${REQUEST_TIMEOUT_MS}ms (attempt ${attempt + 1}), retrying in ${waitMs}ms`);
+          logger.warn(`request timed out after ${REQUEST_TIMEOUT_MS}ms (attempt ${attempt + 1}), retrying in ${waitMs}ms`);
           await new Promise((resolve) => setTimeout(resolve, waitMs));
           continue;
         }

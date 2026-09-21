@@ -15,6 +15,9 @@ import { buildExecuteQueryMetadata } from "../modules/dataServer";
 import { sessionCacheProvider } from "../providers/context/sessionCacheProvider";
 import { InteractionLogger } from "./types";
 import { ENTITY_CONFIGS } from "../config/entities.config";
+import { createLogger } from "./logger";
+
+const logger = createLogger("reasoningEngine");
 
 // entityKey -> linkFields, built once from the same canonical entity
 // config entityModuleFactory.ts already uses to build tool descriptions
@@ -41,7 +44,7 @@ export function buildAggregateChartSpec(args: any, result: any): ChartSpec | und
       : [{ name: chart.title, values: groups.map((group: Record<string, any>) => Number(group.value ?? 0)) }];
     return buildChartSpec({ type: chart.type, title: chart.title, labels, series });
   } catch (error) {
-    console.warn(`[reasoningEngine] analytics.aggregate chart build failed, continuing without it: ${(error as Error).message}`);
+    logger.warn("analytics.aggregate chart build failed, continuing without it", { err: (error as Error).message });
     return undefined;
   }
 }
@@ -825,7 +828,7 @@ export class ReasoningEngine {
           forcedCompensationCall = { name: COMPENSATION_SUPERLATIVE_TOOL, args: forcedArgs, result: forcedResult };
           hints.push(`(${COMPENSATION_SUPERLATIVE_FORCED_HINT})`);
         } catch (err) {
-          console.warn(`[reasoningEngine] forced compensation-superlative pre-fetch failed, continuing without it`, err);
+          logger.warn("forced compensation-superlative pre-fetch failed, continuing without it", { err });
         }
       }
     }
@@ -848,7 +851,7 @@ export class ReasoningEngine {
           forcedPayrollEntryCall = { name: PAYROLL_ENTRY_TOOL, args: forcedArgs, result: forcedResult };
           hints.push(`(${PAYROLL_ENTRY_FORCED_HINT})`);
         } catch (err) {
-          console.warn(`[reasoningEngine] forced payroll-entry pre-fetch failed, continuing without it`, err);
+          logger.warn("forced payroll-entry pre-fetch failed, continuing without it", { err });
         }
       }
     }
@@ -1030,7 +1033,7 @@ export class ReasoningEngine {
 
     for (let i = 0; i < appConfig.llm.maxToolIterations; i++) {
       if (Date.now() - startedAt > MAX_TURN_MS) {
-        console.warn(`[reasoningEngine] turn exceeded ${MAX_TURN_MS}ms budget after ${i} tool iteration(s) — stopping early`);
+        logger.warn(`turn exceeded ${MAX_TURN_MS}ms budget after ${i} tool iteration(s) — stopping early`);
         break;
       }
       const response = await this.llm.chat(messages, tools);
@@ -1112,15 +1115,12 @@ export class ReasoningEngine {
           // detail (axios error code / upstream status+body) to root-
           // cause. Log whatever's actually available on the error.
           const anyErr = err as any;
-          console.error(
-            `[reasoningEngine] tool call failed: ${call.name}`,
-            JSON.stringify(call.arguments),
-            "-",
-            errMsg,
-            anyErr?.code ? `code=${anyErr.code}` : "",
-            anyErr?.response?.status ? `upstreamStatus=${anyErr.response.status}` : "",
-            anyErr?.response?.data ? `upstreamBody=${JSON.stringify(anyErr.response.data).slice(0, 500)}` : ""
-          );
+          logger.error(`tool call failed: ${call.name}`, err instanceof Error ? err : new Error(errMsg), {
+            args: call.arguments,
+            code: anyErr?.code,
+            upstreamStatus: anyErr?.response?.status,
+            upstreamBody: anyErr?.response?.data ? JSON.stringify(anyErr.response.data).slice(0, 500) : undefined,
+          });
           // Confirmed live 2026-08-14: a role-denied tool (ToolNotAllowedError)
           // was retried 15 times with different filters in one turn before
           // the model gave up — the plain error message wasn't read as

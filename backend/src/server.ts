@@ -1,6 +1,34 @@
 import "dotenv/config";
 import express from "express";
 import cors from "cors";
+import { initErrorTracking, createLogger } from "./core/logger";
+
+// Initialized before every other local import that might log/throw
+// during its own module-load side effects (bootstrapModules,
+// startErpnextNotificationPoll below) — so a crash during startup
+// itself still reaches Sentry, not just crashes reached once the
+// server is already serving requests.
+initErrorTracking();
+const logger = createLogger("server");
+
+// A crash inside a route handler is caught by the Express error
+// middleware further down; these two catch everything OUTSIDE that —
+// a rejected Promise nobody awaited, a genuinely uncaught throw in a
+// timer/background task (startErpnextNotificationPoll's own polling
+// loop, for instance). Logged AND reported to Sentry via logger.error,
+// then the process exits — the standard, honest response to a state
+// Node itself can no longer guarantee is consistent, rather than
+// silently limping on. A process manager (pm2/systemd/Docker restart
+// policy) is expected to bring the process back up.
+process.on("uncaughtException", (err) => {
+  logger.error("uncaught exception — exiting", err);
+  process.exit(1);
+});
+process.on("unhandledRejection", (reason) => {
+  logger.error("unhandled promise rejection — exiting", reason instanceof Error ? reason : new Error(String(reason)));
+  process.exit(1);
+});
+
 import { bootstrapModules } from "./bootstrap";
 import { appConfig } from "./config/app.config";
 import authRoutes from "./routes/auth.routes";
@@ -41,9 +69,9 @@ app.get("/health", (_req, res) => res.json({ ok: true }));
 // Last-resort net for anything asyncHandler-wrapped routes forward via
 // next(err) — a broken LLM/ERPNext call or DB error should fail that one
 // request, never bring the whole server down for every other user.
-app.use((err: any, _req: express.Request, res: express.Response, _next: express.NextFunction) => {
-  console.error("[unhandled request error]", err);
+app.use((err: any, req: express.Request, res: express.Response, _next: express.NextFunction) => {
+  logger.error("unhandled request error", err, { method: req.method, path: req.path });
   res.status(err.status || 500).json({ error: err.message || "Internal server error" });
 });
 
-app.listen(appConfig.port, () => console.log(`ERP Agent backend running on :${appConfig.port}`));
+app.listen(appConfig.port, () => logger.info(`ERP Agent backend running on :${appConfig.port}`));

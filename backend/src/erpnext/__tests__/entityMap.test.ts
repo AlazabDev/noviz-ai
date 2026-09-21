@@ -1,6 +1,16 @@
 import { ENTITY_ALIASES } from "../../config/entities.config";
 import { ERPNEXT_ENTITY_MAP, entityKeyForDoctype, nativeFields, toNativeData, toNativeFilters, toCanonicalRow } from "../entityMap";
 
+// entityMap.ts's "drop and warn" behavior (see its own doc comment) now
+// warns through core/logger.ts rather than console.warn directly — see
+// erpnextConnector.aggregate.test.ts's identical mock for why this is a
+// single shared instance rather than a fresh jest.fn() per call.
+jest.mock("../../core/logger", () => {
+  const logger = { info: jest.fn(), warn: jest.fn(), error: jest.fn() };
+  return { createLogger: () => logger, __mockLogger: logger };
+});
+const { __mockLogger: mockLogger } = require("../../core/logger");
+
 describe("ERPNEXT_ENTITY_MAP assembly", () => {
   it("assembles a non-empty map spanning multiple modules", () => {
     expect(Object.keys(ERPNEXT_ENTITY_MAP).length).toBeGreaterThan(20);
@@ -120,11 +130,10 @@ describe("toNativeData", () => {
   });
 
   it("drops a canonical field with no native mapping and warns, rather than passing it through", () => {
-    const warnSpy = jest.spyOn(console, "warn").mockImplementation(() => {});
+    mockLogger.warn.mockClear();
     const out = toNativeData("quotation", { party: "Acme Corp", made_up_field: "x" });
     expect(out).toEqual({ party_name: "Acme Corp" });
-    expect(warnSpy).toHaveBeenCalledWith(expect.stringContaining("made_up_field"));
-    warnSpy.mockRestore();
+    expect(mockLogger.warn).toHaveBeenCalledWith(expect.stringContaining("made_up_field"));
   });
 
   it("translates a child-table array field's rows through the child fieldMap", () => {

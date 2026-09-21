@@ -21,8 +21,22 @@ jest.mock("../../core/settingsService", () => ({
   settingsService: { get: jest.fn() },
 }));
 
+// Real logger.warn/.error calls now go through core/logger.ts (pino +
+// Sentry forwarding, see that file), not console.warn directly — this
+// mock stands in for it so the "warns about it" tests below assert on
+// the same information without needing a real pino/Sentry pipeline.
+// Same shared-instance reasoning as the ../client mock above:
+// erpnextConnector.ts creates its logger once at module load
+// (`createLogger("erpnextConnector")`), so every test in this file sees
+// that one instance.
+jest.mock("../../core/logger", () => {
+  const logger = { info: jest.fn(), warn: jest.fn(), error: jest.fn() };
+  return { createLogger: () => logger, __mockLogger: logger };
+});
+
 const { getDocList, callMethod } = require("../client");
 const { settingsService } = require("../../core/settingsService");
+const { __mockLogger: mockLogger } = require("../../core/logger");
 
 describe("ErpNextConnector.count", () => {
   const connector = new ErpNextConnector();
@@ -162,20 +176,17 @@ describe("ErpNextConnector.aggregate — over the cap WITH a date-range filter, 
 describe("ErpNextConnector.aggregate — over the cap with NO date filter falls back to a capped, warned fetch", () => {
   const connector = new ErpNextConnector();
   const credential = { mode: "api_key", apiKey: "k", apiSecret: "s" } as any;
-  let warnSpy: jest.SpyInstance;
 
   beforeEach(() => {
     jest.clearAllMocks();
     callMethod.mockResolvedValue(50000); // over cap, no date-shaped filter given
     getDocList.mockResolvedValue([{ name: "A", grand_total: 100 }]);
-    warnSpy = jest.spyOn(console, "warn").mockImplementation(() => {});
   });
-  afterEach(() => warnSpy.mockRestore());
 
   it("still returns a (possibly partial) number rather than throwing, and warns about it", async () => {
     const result = await connector.aggregate("sales_invoice", credential, { field: "total", op: "sum", filters: { status: "Open" } });
     expect(result.overall.value).toBe(100);
-    expect(warnSpy).toHaveBeenCalledWith(expect.stringContaining("no date-range filter to chunk on"));
+    expect(mockLogger.warn).toHaveBeenCalledWith(expect.stringContaining("no date-range filter to chunk on"));
   });
 });
 
