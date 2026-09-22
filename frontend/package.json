@@ -1,0 +1,34 @@
+{
+  "name": "ai-chatbot-frontend",
+  "version": "1.0.0",
+  "type": "module",
+  "description": "ERPNext AI Assistant",
+  "author": "Sanjay Kumar <sanjay.kumar001@gmail.com>",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/sanjay-kumar001/ai_chatbot.git"
+  },
+  "scripts": {
+    "dev": "vite",
+    "serve": "vite preview",
+    "build": "vite build --base=/assets/ai_chatbot/frontend/ && yarn copy-html-entry",
+    "copy-html-entry": "cp ../ai_chatbot/public/frontend/index.html ../ai_chatbot/www/ai-chatbot.html"
+  },
+  "dependencies": {
+    "echarts": "^6.0.0",
+    "highlight.js": "^11.9.0",
+    "lucide-vue-next": "^0.309.0",
+    "marked": "^11.1.1",
+    "socket.io-client": "^4.8.3",
+    "vue": "^3.4.15",
+    "vue-router": "^4.2.5"
+  },
+  "devDependencies": {
+    "@vitejs/plugin-vue": "^5.0.3",
+    "autoprefixer": "^10.4.17",
+    "postcss": "^8.4.33",
+    "tailwindcss": "^3.4.1",
+    "vite": "^5.0.12"
+  }
+}
