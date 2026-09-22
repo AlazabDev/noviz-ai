@@ -41,6 +41,25 @@ REQUEST_TIMEOUT_SECONDS = 150
 # above is the other real backstop if round trips are individually slow.
 MAX_ROUND_TRIPS = 30
 
+# The chat Page itself is role-restricted (noviz_ai_chat.json's own
+# "roles": ["Noviz AI Agent", "System Manager"]) — but that ONLY governs
+# whether the Desk shows/routes to that page. It does NOT, by itself,
+# stop a different authenticated user from calling
+# /api/method/noviz_ai.api.send_message (or any other endpoint below)
+# directly. Every kind dispatcher.py executes still runs under Frappe's
+# own real per-doctype permission model (so a low-privilege caller still
+# can't read/write records they couldn't already touch) — EXCEPT
+# send_communication, which sends real outbound email to an arbitrary
+# address with no doctype behind it to check permission against at all.
+# Without this gate, any merely-logged-in user (a portal customer, for
+# instance) could reach that kind directly and use this site's own SMTP
+# identity to send arbitrary mail. This function is the real fix: every
+# whitelisted endpoint below requires it first, so "logged in" is never
+# treated as "authorized to use Noviz AI".
+def _require_agent_role():
+	if "Noviz AI Agent" not in frappe.get_roles() and "System Manager" not in frappe.get_roles():
+		frappe.throw("Noviz AI: you do not have permission to use this feature.", frappe.PermissionError)
+
 
 def _settings():
 	# 2026-08-21: the standalone "Enabled" checkbox was removed - a real
@@ -146,6 +165,7 @@ def get_status():
 	unlike send_message's own _settings() (which throws on purpose, once
 	an actual chat attempt is made).
 	"""
+	_require_agent_role()
 	settings = frappe.get_single("Noviz AI Settings")
 	configured = bool(settings.relay_base_url and settings.get_password("api_key", raise_exception=False))
 	return {
@@ -262,8 +282,18 @@ def run_agent_turn(prompt: str, previous_turn_id: str = None):
 	caller decides who that is — send_message never touches it, a
 	scheduled job sets it explicitly via frappe.set_user first). No
 	`@frappe.whitelist()` here on purpose: this is an internal building
-	block, not a second public endpoint.
+	block, not a second public endpoint. Enforces _require_agent_role()
+	itself (rather than leaving that to each caller) precisely because it
+	has more than one caller: send_message (an actually-logged-in
+	person) and scheduled_tasks.py (running as whatever user a "Noviz AI
+	Scheduled Task" record names) both need the same real guarantee — a
+	scheduled task configured to run as some user who was never granted
+	the Noviz AI Agent role shouldn't be able to act as this app's own
+	well-permissioned automation identity just by being named in a
+	schedule; the person setting up the schedule needs to pick a user who
+	is actually allowed to use Noviz AI in the first place.
 	"""
+	_require_agent_role()
 	if not prompt or not prompt.strip():
 		frappe.throw("prompt is required")
 
@@ -333,6 +363,7 @@ def next_page(tool: str, args: str):
 	"""
 	import json
 
+	_require_agent_role()
 	if not tool or not tool.strip():
 		frappe.throw("tool is required")
 
@@ -375,6 +406,7 @@ def scan_image(note: str = None, previous_turn_id: str = None):
 	into a JSON body) — see noviz_ai_chat.js's own upload code for the
 	matching client side.
 	"""
+	_require_agent_role()
 	upload = frappe.request.files.get("image") if frappe.request else None
 	if not upload:
 		frappe.throw("image is required (jpeg/png/webp, max 2MB)")
@@ -452,6 +484,7 @@ def generate_report_pdf(spec: str):
 	"""
 	import json
 
+	_require_agent_role()
 	try:
 		parsed = json.loads(spec)
 	except (TypeError, ValueError):
@@ -603,6 +636,7 @@ def discover_reports(module: str = None, q: str = None):
 	matched against the report name) narrow it. Returns just names +
 	types — the model calls get_report_filters() next for the one it
 	wants."""
+	_require_agent_role()
 	filters = {"disabled": 0, "report_type": ["in", list(_DISCOVERABLE_REPORT_TYPES)]}
 	if module:
 		filters["module"] = module
@@ -632,6 +666,7 @@ def get_report_filters(report_name: str):
 	on the Report doc; most Script Reports define theirs in JS instead
 	(not readable here) — those come back with an empty `filters` list
 	and a `note`, and still run fine on their own defaults."""
+	_require_agent_role()
 	if not report_name:
 		frappe.throw("A report name is required.")
 	if not frappe.db.exists("Report", report_name):

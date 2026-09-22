@@ -392,6 +392,20 @@ def execute_call_spec(spec: dict):
 		# Same 2026-08-22 switch to our own SMTP (email_sender.py) instead
 		# of Frappe's configured Email Account, same reasoning. No linked-
 		# document/PDF-attachment support — a real, separate follow-up.
+		#
+		# SECURITY: unlike every other kind above, this one has no
+		# existing document to tie a frappe.has_permission()/
+		# doc.has_permission() check to — "send mail to an address the
+		# model typed" isn't a doctype read/write. api.py's own
+		# run_agent_turn() already requires the Noviz AI Agent (or
+		# System Manager) role before any call spec — including this one
+		# — ever reaches here; this second check exists ONLY so that
+		# fact stays true even if a future caller reaches
+		# execute_call_spec() directly and forgets that requirement —
+		# exactly the gap that let this kind be reachable by ANY merely-
+		# logged-in user before 2026-09-21's audit fixed it.
+		if "Noviz AI Agent" not in frappe.get_roles() and "System Manager" not in frappe.get_roles():
+			frappe.throw("Noviz AI: you do not have permission to send email through Noviz AI.", frappe.PermissionError)
 		values = spec.get("values") or {}
 		recipients = values.get("recipients")
 		subject = values.get("subject")
